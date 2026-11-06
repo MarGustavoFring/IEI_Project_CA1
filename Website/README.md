@@ -8,8 +8,11 @@ shoe, sees every size and colour in store, and requests a pair that is brought t
 > All products, prices and stock are invented; shoes are placeholder drawings.
 
 ## Run it
-- **Easiest:** double-click `index.html`. It works offline; fonts fall back to system fonts without internet.
-- **Or:** `node serve.js` → http://localhost:5173
+- **Dev server:** from the repo root run `npm run dev`, then open http://localhost:5173.
+  Needs Node 18+; there's nothing to install. The page reloads by itself when you save a file,
+  and CSS changes apply without a reload, so you keep your place in the demo.
+  If port 5173 is busy it uses the next free one and prints the URL.
+- **No Node?** Double-click `index.html`. It works offline; fonts fall back to system fonts without internet.
 
 ## What's on the page
 | Area | What it does |
