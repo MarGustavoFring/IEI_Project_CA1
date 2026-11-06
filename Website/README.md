@@ -116,3 +116,6 @@ Database and setup live in the repo root: `supabase/schema.sql`, `scripts/db-set
 ## AI-use declaration
 Built with AI assistance (Claude, Anthropic) on 27 Oct 2026. Declare it on the group AI-use form (Option B):
 tool, date, and that it generated the prototype code and placeholder content.
+
+## Hosting
+Live at https://nike-iei.vercel.app (Vercel project root directory: `Website`).
