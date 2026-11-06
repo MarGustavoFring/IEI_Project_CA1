@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Try-On Kiosk · Concept Prototype</title>
+  <meta name="description" content="Clickable mock-up of a student concept for an in-store shoe try-on kiosk (EP0710 IEI). Not affiliated with Nike.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23E4572E'/%3E%3Cpath d='M11 25.5c4.5 1 9.5 1 14-.5l4-1.6M15 15h10M20 15v11' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <!-- Fonts load when online; offline it falls back to system fonts. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="panel presenter" id="presenter" aria-label="Presenter controls"></aside>
+
+    <main class="stage" id="stage">
+      <div class="device-wrap" id="deviceWrap">
+        <div class="device" id="device">
+          <div class="screen" id="screen" aria-live="polite"></div>
+          <div class="device-base" aria-hidden="true">
+            <div class="scanner"><i></i></div>
+            <span class="base-label">Scan tag here</span>
+            <span class="pad-label">Foot pad ↓</span>
+          </div>
+        </div>
+      </div>
+      <button class="solo-exit" data-act="solo">Exit kiosk mode <kbd>Esc</kbd></button>
+    </main>
+
+    <aside class="panel staff" id="staff" aria-label="Staff handheld view"></aside>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
