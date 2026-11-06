@@ -3,6 +3,11 @@
 node_modules/
 *.zip
 
+# Secrets: never commit (see .env.example for the names)
+.env
+.env.*
+!.env.example
+
 # OS clutter
 .DS_Store
 Thumbs.db

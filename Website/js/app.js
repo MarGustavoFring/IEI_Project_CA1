@@ -5,6 +5,7 @@
 (() => {
   const C = window.KIOSK_CONFIG;
   const A = window.KioskArt;
+  const Acc = window.KioskAccounts;
   const icon = A.icon;
   const $ = (s, r = document) => r.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -12,6 +13,8 @@
 
   const SCREENS = [
     { id: "attract",  label: "Attract" },
+    { id: "login",    label: "Sign in / guest", module: "accounts" },
+    { id: "register", label: "Create account", module: "accounts" },
     { id: "scan",     label: "Scan a shoe" },
     { id: "product",  label: "Sizes & stock" },
     { id: "footscan", label: "Foot scan", module: "footScan" },
@@ -20,6 +23,7 @@
     { id: "arrived",  label: "Box arrived", module: "request" },
     { id: "checkout", label: "Pay at counter" },
     { id: "thanks",   label: "Thank you" },
+    { id: "admin",    label: "Admin · stock", module: "accounts" },
   ];
 
   /* ---------------- Settings (remembered per browser) ---------------- */
@@ -42,7 +46,12 @@
     notes: saved.notes != null ? saved.notes : C.demo.showNotes,
     staffManual: !!saved.staffManual,
     solo: false,
+    // accounts
+    user: null, form: {}, formErr: null, pending: null, showPw: false, busy: false,
+    adminCode: C.products[0].code, adminColour: null, confirmReset: false,
   };
+  const isAdmin = () => !!state.user && state.user.role === "admin";
+  const isMember = () => !!state.user && !state.user.guest;
   function saveSettings() {
     try {
       localStorage.setItem(LS, JSON.stringify({
@@ -180,6 +189,12 @@
     clearLater();
     state.scanning = null;
     state.keypad = false;
+    state.confirmReset = false;
+    if (screen === "admin" && !isAdmin()) {
+      screen = "login";
+      state.formErr = { message: "Sign in with an admin account to manage stock." };
+    }
+    if (screen !== state.screen && !["login", "register"].includes(screen)) { state.form = {}; state.formErr = null; state.pending = null; }
     state.screen = screen;
     if (screen === "thanks") later(() => resetSession(), 9000);
     render(animate);
@@ -202,9 +217,12 @@
     }
     go(screen);
   }
+  // A shared kiosk: starting over also signs the last person out.
   function resetSession() {
     clearLater();
+    Acc.logout();
     Object.assign(state, {
+      user: null, form: {}, formErr: null, pending: null, showPw: false, confirmReset: false,
       screen: "attract", product: null, colour: null, size: null, foot: null,
       footPhase: "intro", pairUp: true, point: C.store.defaultPoint,
       activeId: null, cart: [], ticket: null, scanning: null, keypad: false, code: "", codeError: "",
@@ -221,11 +239,12 @@
     return `<header class="k-top">
       <div class="k-brand">
         ${back ? `<button class="k-iconbtn" data-act="${back}" aria-label="Back">${icon("arrowLeft")}</button>` : A.logo()}
-        <div class="k-brand-t"><b>${esc(C.meta.kioskName)}</b><span>${esc(C.store.name)} · ${esc(C.store.kioskFloor)}</span></div>
+        <div class="k-brand-t"><b>${esc(C.meta.kioskName)}</b><span>${esc(C.store.name)} · ${esc(C.store.kioskFloor)}${state.user ? ` · <i class="who ${state.user.role}">${state.user.guest ? "Guest" : `Hi, ${esc(state.user.name.split(" ")[0])}`}</i>` : ""}</span></div>
       </div>
       <div class="k-top-r">
         ${pill ? `<button class="k-pill ${isArrived(req) ? "is-ready" : ""}" data-act="toWait" data-live="pill">${pillText(req)}</button>` : ""}
-        <button class="k-ghost ${pill ? "icon-only" : ""}" data-act="home" aria-label="Start over">${icon("refresh")}<span>Start over</span></button>
+        ${isAdmin() ? `<button class="k-ghost" data-act="toAdmin">${icon("layers")}<span>Stock</span></button>` : ""}
+        <button class="k-ghost ${pill || isAdmin() ? "icon-only" : ""}" data-act="home" aria-label="Start over">${icon("refresh")}<span>Start over</span></button>
       </div>
     </header>`;
   }
@@ -392,7 +411,7 @@
             <li>${icon("check")}Your arch type</li>
             <li>${icon("check")}Your size in ${p ? esc(p.name) : "this model"}</li>
           </ul>
-          <p class="fine rise" style="--d:5">${icon("shield")}Nothing is saved. Results clear when you start over.</p>
+          <p class="fine rise" style="--d:5">${icon("shield")}${isMember() ? "Saved to your account so you can skip this next time." : "Nothing is saved. Results clear when you start over."}</p>
         </div>`;
       } else if (ph === "scanning") {
         body = `<div class="fs-scanning">
@@ -592,7 +611,178 @@
         <div class="th-reset rise" style="--d:3"><i></i><span>Resetting for the next shopper…</span></div>
       </section>`;
     },
+
+    login() {
+      return `<section class="scr auth">${topbar({ back: "home" })}
+        <div class="scroll">
+          <div class="auth-hero rise" style="--d:0">
+            <span class="kicker">Welcome</span>
+            <h2>How would you like<br>to continue?</h2>
+          </div>
+          <button class="guest-card rise" style="--d:1" data-act="guest">
+            <span class="guest-ico">${icon("user")}</span>
+            <div><b>Continue as guest</b><span>No account needed. Scan, try on, pay at the counter.</span></div>
+            ${icon("arrowRight")}
+          </button>
+          <div class="divider rise" style="--d:2"><span>or sign in</span></div>
+          <form class="auth-form rise" style="--d:3" data-form="login" novalidate>
+            ${Acc.online() ? "" : `<p class="form-err">${icon("info")}Accounts need an internet connection. You can still continue as guest.</p>`}
+            ${formError()}
+            ${field("email", "Email", "email", { auto: "email" })}
+            ${field("password", "Password", "password", { auto: "current-password" })}
+            <button class="btn-primary" type="submit" ${state.busy ? "disabled" : ""}>Sign in ${icon("arrowRight")}</button>
+          </form>
+          <p class="auth-switch rise" style="--d:4">New here? <button data-act="toRegister">Create an account</button></p>
+          <p class="fine rise" style="--d:5">${icon("shield")}You stay signed in only until you tap Start over.</p>
+        </div>
+      </section>`;
+    },
+
+    register() {
+      if (state.pending) {
+        return `<section class="scr auth">${topbar({ back: "toLogin" })}
+          <div class="scroll center">
+            <div class="sent rise" style="--d:0">
+              <div class="sent-ico">${icon("check")}</div>
+              <span class="kicker">Almost there</span>
+              <h2>Check your inbox</h2>
+              <p>We sent a confirmation link to<br><b>${esc(state.pending)}</b>.<br>Open it, then sign in here.</p>
+            </div>
+          </div>
+          <footer class="cta-bar row">
+            <button class="btn-ghost" data-act="guest">Continue as guest</button>
+            <button class="btn-primary" data-act="toLogin">Go to sign in ${icon("arrowRight")}</button>
+          </footer>
+        </section>`;
+      }
+      return `<section class="scr auth">${topbar({ back: "toLogin" })}
+        <div class="scroll">
+          <div class="auth-hero rise" style="--d:0">
+            <span class="kicker">Create an account</span>
+            <h2>Save your size<br>for next time</h2>
+            <p>Members skip the foot scan on their next visit.</p>
+          </div>
+          <form class="auth-form rise" style="--d:1" data-form="register" novalidate>
+            ${formError()}
+            ${field("name", "Your name", "text", { auto: "given-name" })}
+            ${field("email", "Email", "email", { auto: "email", hint: "We'll send a link to confirm it" })}
+            ${field("password", "Password", "password", { auto: "new-password", hint: "At least 6 characters" })}
+            ${field("confirm", "Confirm password", "password", { auto: "new-password" })}
+            <button class="btn-primary" type="submit" ${state.busy ? "disabled" : ""}>Create account ${icon("arrowRight")}</button>
+          </form>
+          <p class="auth-switch rise" style="--d:2">Already have an account? <button data-act="toLogin">Sign in</button></p>
+          <p class="auth-switch rise" style="--d:2">Rather not? <button data-act="guest">Continue as guest</button></p>
+          <p class="fine rise" style="--d:3">${icon("shield")}We only keep your name, email and saved foot scan.</p>
+        </div>
+      </section>`;
+    },
+
+    admin() {
+      const p = productBy(state.adminCode) || C.products[0];
+      const c = colourBy(p, state.adminColour);
+      const r = runOf(p);
+      const floors = Object.keys(C.store.floors);
+      let pairs = 0, soldOut = 0, low = 0;
+      C.products.forEach((q) => q.colours.forEach((col) => runOf(q).sizes.forEach((uk) => {
+        const n = stockFor(q, col, uk).total;
+        pairs += n;
+        if (n === 0) soldOut++;
+        if (n === 1) low++;
+      })));
+      return `<section class="scr admin">
+        <header class="k-top">
+          <div class="k-brand">${A.logo()}<div class="k-brand-t"><b>Stock manager</b><span>${esc(state.user.name)} · <i class="who admin">Admin</i></span></div></div>
+          <div class="k-top-r">
+            <button class="k-ghost" data-act="adminPreview">${icon("eye")}<span>View kiosk</span></button>
+            <button class="k-ghost icon-only" data-act="home" aria-label="Sign out">${icon("x")}<span>Sign out</span></button>
+          </div>
+        </header>
+        <div class="scroll">
+          <div class="adm-stats rise" style="--d:0">
+            <div><b>${pairs}</b><span>Pairs in store</span></div>
+            <div class="${soldOut ? "warn" : ""}"><b>${soldOut}</b><span>Sizes sold out</span></div>
+            <div><b>${low}</b><span>Last pair left</span></div>
+          </div>
+          <h3 class="sec-h rise" style="--d:1">Product</h3>
+          <div class="adm-prods rise" style="--d:1">
+            ${C.products.map((q) => `<button class="${q.code === p.code ? "is-sel" : ""}" data-act="adminProduct" data-arg="${q.code}">
+              ${shoeThumb(q, q.colours[0])}<b>${esc(q.name)}</b><small>#${q.code} · ${q.colours.reduce((s, col) => s + colourTotal(q, col), 0)} pairs</small>
+            </button>`).join("")}
+          </div>
+          <div class="adm-colours rise" style="--d:2">
+            ${p.colours.map((col) => `<button class="${col.id === c.id ? "is-sel" : ""}" data-act="adminColour" data-arg="${col.id}"><i class="dotc" style="background:${col.upper}"></i>${esc(col.name)}<small>${colourTotal(p, col)}</small></button>`).join("")}
+          </div>
+          <div class="adm-table k-card rise" style="--d:3">
+            <div class="adm-row head"><span title="${esc(r.label)} sizes">UK</span>${floors.map((f) => `<span title="${esc(C.store.floors[f])}">${f}</span>`).join("")}<span>Total</span></div>
+            ${r.sizes.map((uk, i) => {
+              const total = stockFor(p, c, uk).total;
+              return `<div class="adm-row ${total === 0 ? "is-out" : total === 1 ? "is-low" : ""}">
+                <b>${uk}</b>
+                ${floors.map((f) => {
+                  const n = ((c.stock || {})[f] || [])[i] || 0;
+                  return `<div class="stp">
+                    <button data-act="stock" data-arg="${f}:${i}:-1" ${n === 0 ? "disabled" : ""} aria-label="Remove a pair of UK ${uk} on ${f}">−</button>
+                    <span>${n}</span>
+                    <button data-act="stock" data-arg="${f}:${i}:1" ${n >= 99 ? "disabled" : ""} aria-label="Add a pair of UK ${uk} on ${f}">+</button>
+                  </div>`;
+                }).join("")}
+                <em>${total}</em>
+              </div>`;
+            }).join("")}
+          </div>
+          <p class="fine">${Acc.isLiveStock()
+            ? `<span class="live-dot"></span>Live: changes save to the database and update every kiosk straight away.`
+            : `${icon("info")}Can't reach the database, so these are the built-in numbers and changes won't save.`}</p>
+        </div>
+        <footer class="cta-bar row">
+          <button class="btn-ghost ${state.confirmReset ? "is-danger" : ""}" data-act="stockReset" ${Acc.stockEdited() ? "" : "disabled"}>${state.confirmReset ? "Tap again to reset" : "Reset all stock"}</button>
+          <button class="btn-primary" data-act="adminPreview">See it on the kiosk ${icon("arrowRight")}</button>
+        </footer>
+      </section>`;
+    },
   };
+
+  function field(name, label, type, { auto = "off", hint = "" } = {}) {
+    const err = state.formErr && state.formErr.field === name;
+    const pw = type === "password";
+    return `<label class="fld ${err ? "is-err" : ""}">
+      <span>${esc(label)}</span>
+      <div class="fld-box">
+        <input name="${name}" data-field="${name}" type="${pw && state.showPw ? "text" : type}" value="${esc(state.form[name] || "")}"
+          autocomplete="${auto}" autocapitalize="off" spellcheck="false" ${err ? 'aria-invalid="true"' : ""}>
+        ${pw ? `<button type="button" class="fld-eye ${state.showPw ? "is-on" : ""}" data-act="togglePw" aria-label="${state.showPw ? "Hide" : "Show"} password">${icon("eye")}</button>` : ""}
+      </div>
+      ${err ? `<small class="fld-msg">${esc(state.formErr.message)}</small>` : hint ? `<small>${esc(hint)}</small>` : ""}
+    </label>`;
+  }
+  function formError() {
+    const e = state.formErr;
+    return e && !e.field ? `<p class="form-err">${icon("info")}${esc(e.message)}</p>` : "";
+  }
+
+  function signedIn(user, isNew) {
+    state.user = user;
+    state.form = {};
+    state.formErr = null;
+    state.showPw = false;
+    if (user.foot) state.foot = user.foot;
+    showToast(`${isNew ? "Welcome" : "Welcome back"}, ${user.name.split(" ")[0]}`);
+    go(user.role === "admin" ? "admin" : "scan");
+  }
+
+  // The toast sits beside the screen body, so re-renders don't restart its animation.
+  let toastTimer = null;
+  function showToast(msg, isError = false) {
+    const old = $("#screen > .toast");
+    if (old) old.remove();
+    const t = document.createElement("div");
+    t.className = `toast ${isError ? "is-err" : ""}`;
+    t.setAttribute("role", "status");
+    t.innerHTML = `${icon(isError ? "info" : "check")}${esc(msg)}`;
+    $("#screen").appendChild(t);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.remove(), 2600);
+  }
 
   function stockPanel(p, c, uk, st) {
     if (st.total > 0) {
@@ -645,7 +835,34 @@
   /* ---------------- Actions ---------------- */
   const actions = {
     noop() {},
-    start: () => go("scan"),
+    start: () => go(on("accounts") && !state.user ? "login" : isAdmin() ? "admin" : "scan"),
+
+    /* accounts */
+    guest() { state.user = Acc.continueAsGuest(); go("scan"); },
+    toLogin() { state.formErr = null; state.showPw = false; go("login"); },
+    toRegister() { state.formErr = null; state.showPw = false; go("register"); },
+    togglePw() { state.showPw = !state.showPw; render(false); },
+    toAdmin: () => go("admin"),
+    adminPreview() { selectProduct(state.adminCode); state.colour = colourBy(state.product, state.adminColour); go("product"); },
+    adminProduct(code) { state.adminCode = code; state.adminColour = null; state.confirmReset = false; render(false); },
+    adminColour(id) { state.adminColour = id; state.confirmReset = false; render(false); },
+    async stock(arg) {
+      const [floor, i, delta] = arg.split(":");
+      const p = productBy(state.adminCode), c = colourBy(p, state.adminColour);
+      const now = ((c.stock || {})[floor] || [])[Number(i)] || 0;
+      state.confirmReset = false;
+      const saving = Acc.setStock(p, c, floor, Number(i), now + Number(delta));
+      render(false); // the new number shows at once; it's undone if the save fails
+      const res = await saving;
+      if (!res.ok) { showToast(res.error.message, true); render(false); }
+    },
+    async stockReset() {
+      if (!state.confirmReset) { state.confirmReset = true; render(false); return; }
+      state.confirmReset = false;
+      const res = await Acc.resetStock();
+      showToast(res.ok ? "Stock reset to the original numbers" : res.error.message, !res.ok);
+      render(false);
+    },
     home: () => resetSession(),
     toScan: () => go("scan"),
     toProduct: () => go("product"),
@@ -701,7 +918,12 @@
     footStart() {
       state.footPhase = "scanning";
       render(false);
-      later(() => { state.foot = C.footScan.result; state.footPhase = "result"; render(false); }, 3600);
+      later(() => {
+        state.foot = C.footScan.result;
+        state.footPhase = "result";
+        if (isMember()) Acc.saveFoot(state.foot);
+        render(false);
+      }, 3600);
     },
     footUse() {
       const p = state.product, rec = recommended(p);
@@ -784,7 +1006,7 @@
 
   function fixScreenForModules() {
     const s = SCREENS.find((x) => x.id === state.screen);
-    if (s && s.module && !on(s.module)) go(state.product ? "product" : "scan");
+    if (s && s.module && !on(s.module)) go(state.product ? "product" : s.module === "accounts" ? "attract" : "scan");
   }
 
   /* ---------------- Simulation clock ---------------- */
@@ -880,12 +1102,14 @@
   /* ---------------- Rendering ---------------- */
   function renderKiosk(animate) {
     const screen = $("#screen");
+    let body = $("#screenBody");
+    if (!body) { body = document.createElement("div"); body.id = "screenBody"; screen.prepend(body); }
     // Live re-renders (stage changes, toggles) keep the shopper's scroll position.
-    const prevScroll = animate ? 0 : (screen.querySelector(".scroll") || {}).scrollTop || 0;
-    screen.innerHTML = screens[state.screen]();
-    const sc = screen.querySelector(".scroll");
+    const prevScroll = animate ? 0 : (body.querySelector(".scroll") || {}).scrollTop || 0;
+    body.innerHTML = screens[state.screen]();
+    const sc = body.querySelector(".scroll");
     if (sc && prevScroll) sc.scrollTop = prevScroll;
-    const scr = screen.firstElementChild;
+    const scr = body.firstElementChild;
     if (animate && scr) scr.classList.add("enter");
     const device = $("#device");
     device.classList.toggle("lofi", state.fidelity === "lofi");
@@ -918,6 +1142,17 @@
       <section class="pr-sec notes">
         <h3>Why this screen</h3>
         <ul>${notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
+      </section>` : ""}
+
+      ${on("accounts") ? `
+      <section class="pr-sec">
+        <h3>Account <small>${Acc.online() ? (Acc.isLiveStock() ? "Supabase · live stock" : "Supabase") : "offline"}</small></h3>
+        ${state.user
+          ? `<div class="acct"><span class="acct-av">${esc((state.user.name || "?").charAt(0).toUpperCase())}</span>
+              <div><b>${esc(state.user.name)}</b><small>${state.user.guest ? "Guest, no account" : `${isAdmin() ? "Admin" : "Member"} · ${esc(state.user.email || "")}`}</small></div>
+              <button class="pbtn ghost sm" data-act="home">Sign out</button></div>`
+          : `<div class="acct"><span class="acct-av">${icon("user")}</span><div><b>Nobody signed in</b><small>Tap the kiosk to start</small></div>
+              <button class="pbtn ghost sm" data-act="jump" data-arg="login">Sign in</button></div>`}
       </section>` : ""}
 
       <section class="pr-sec">
@@ -1040,10 +1275,45 @@
       else if (e.key === "Escape") actions.keypadClose();
     }
   });
+  // Form fields keep their values in state, so re-renders never wipe what was typed.
+  document.addEventListener("input", (e) => {
+    const f = e.target.dataset && e.target.dataset.field;
+    if (f) state.form[f] = e.target.value;
+  });
+  document.addEventListener("submit", async (e) => {
+    const form = e.target.closest("[data-form]");
+    if (!form) return;
+    e.preventDefault();
+    if (state.busy) return;
+    state.busy = true;
+    state.formErr = null;
+    render(false);
+    const f = state.form;
+    const res = form.dataset.form === "login" ? await Acc.login(f.email, f.password) : await Acc.register(f);
+    state.busy = false;
+    if (res.ok) { signedIn(res.user, form.dataset.form === "register"); return; }
+    if (res.pending) { state.pending = res.email; state.form = {}; render(true); return; }
+    state.formErr = res.error;
+    render(false);
+    const bad = $(`#screen [data-field="${res.error.field || ""}"]`) || $("#screen [data-field]");
+    if (bad) bad.focus();
+  });
+
   window.addEventListener("resize", fit);
   if (window.ResizeObserver) new ResizeObserver(fit).observe($("#stage"));
 
   seedRequests();
   render(true);
   setInterval(tick, TICK);
+
+  // Accounts and live stock arrive from Supabase after the first paint.
+  Promise.all([Acc.init(), Acc.loadStock()]).then(([user]) => {
+    state.user = user;
+    if (user && user.foot) state.foot = user.foot;
+    render(false);
+  });
+  Acc.onStockChange(() => {
+    if (["product", "admin", "scan"].includes(state.screen)) render(false);
+    else renderPresenter();
+  });
 })();

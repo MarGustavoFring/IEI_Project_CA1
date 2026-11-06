@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = __dirname;
-const startPort = Number(process.env.PORT) || 5173;
+const startPort = Number(process.env.PORT) || 3000;
 const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".md": "text/plain" };
 
 const RELOAD_PATH = "/__reload";

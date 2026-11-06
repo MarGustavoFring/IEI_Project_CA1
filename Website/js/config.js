@@ -24,7 +24,8 @@ window.KIOSK_CONFIG = {
 
   // Each module can be switched off in the presenter panel (L10: "Improvisation").
   modules: {
-    scan:         { on: true,  label: "QR scan",            desc: "Scan a display shoe's tag. Off = browse a catalogue." },
+    accounts:     { on: true,  label: "Accounts & sign-in", desc: "Sign in, register or continue as guest. Off = straight to scanning." },
+    scan:         { on: true,  label: "QR scan",           desc: "Scan a display shoe's tag. Off = browse a catalogue." },
     manualCode:   { on: true,  label: "Manual code entry",  desc: "Keypad fallback when a tag won't scan." },
     stockByFloor: { on: true,  label: "Stock per floor",    desc: "Pair counts and where they're kept." },
     request:      { on: true,  label: "Request a pair",     desc: "Off = info kiosk; ask staff yourself." },
@@ -35,8 +36,15 @@ window.KIOSK_CONFIG = {
     staffQueue:   { on: true,  label: "Staff handheld",     desc: "The runner's request queue." },
   },
 
+  // Supabase project for accounts and live stock. The URL and anon key are public by design:
+  // row level security (supabase/schema.sql) decides what they may do. Secret keys live in .env only.
+  supabase: {
+    url: "https://qeuakqxyelfdvplkkbnk.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFldWFrcXh5ZWxmZHZwbGtrYm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MjcyODcsImV4cCI6MjEwOTUwMzI4N30.eTSCv6glT3w3JSAoosJdwPchigse06-76oy4JDCOfhQ",
+  },
+
   demo: {
-    speed: 5,              // simulated seconds per real second
+    speed: 5,             // simulated seconds per real second
     speeds: [1, 5, 15],
     fidelity: "hifi",      // "hifi" | "lofi"
     showNotes: true,
@@ -297,5 +305,18 @@ window.KIOSK_CONFIG = {
       "No accounts, logins or personal data.",
     ],
     thanks: ["Resets itself for the next shopper."],
+    login: [
+      "Guest is the big, first option: the kiosk still works with no app and no account, which is what sets it apart from Nike's 2018 'scan to try'.",
+      "Members get their foot scan remembered for next time.",
+      "Accounts are real (Supabase Auth); the sign-in ends when the tab closes or someone taps Start over, as a shared kiosk should.",
+    ],
+    register: [
+      "Keep registration short: name, email, password. No phone, no address.",
+      "Collecting an email is personal data: say so in the CA2 Q&A, and point out guests share nothing.",
+    ],
+    admin: [
+      "Store view: the admin adjusts pairs per size and floor, and the kiosk updates straight away.",
+      "In the real concept this would come from RFID stock data (Nike tags almost all footwear), not manual entry.",
+    ],
   },
 };
